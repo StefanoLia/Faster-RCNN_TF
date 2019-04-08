@@ -5,6 +5,8 @@ from fast_rcnn.test import im_detect
 from fast_rcnn.nms_wrapper import nms
 from utils.timer import Timer
 import matplotlib.pyplot as plt
+from matplotlib.backends.backend_agg import FigureCanvasAgg as FigureCanvas
+from matplotlib.figure import Figure
 import numpy as np
 import os, sys, cv2
 import argparse
@@ -51,18 +53,19 @@ def vis_detections(im, class_name, dets,ax, thresh=0.5):
     plt.draw()
 
 
-def demo(sess, net, image_name):
+def demo(sess, net, im):
     """Detect object classes in an image using pre-computed object proposals."""
 
     # Load the demo image
-    im_file = os.path.join(cfg.DATA_DIR, 'demo', image_name)
+    # im_file = os.path.join(cfg.DATA_DIR, 'demo', image_name)
     #im_file = os.path.join('/home/corgi/Lab/label/pos_frame/ACCV/training/000001/',image_name)
-    im = cv2.imread(im_file)
+    # im = cv2.imread(im_file)
 
     # Detect all object classes and regress object bounds
     timer = Timer()
     timer.tic()
     scores, boxes = im_detect(sess, net, im)
+    # print scores
     timer.toc()
     print ('Detection took {:.3f}s for '
            '{:d} object proposals').format(timer.total_time, boxes.shape[0])
@@ -84,6 +87,7 @@ def demo(sess, net, image_name):
         dets = dets[keep, :]
         vis_detections(im, cls, dets, ax, thresh=CONF_THRESH)
 
+
 def parse_args():
     """Parse input arguments."""
     parser = argparse.ArgumentParser(description='Faster R-CNN demo')
@@ -100,6 +104,8 @@ def parse_args():
     args = parser.parse_args()
 
     return args
+
+
 if __name__ == '__main__':
     cfg.TEST.HAS_RPN = True  # Use RPN for proposals
 
@@ -114,8 +120,9 @@ if __name__ == '__main__':
     net = get_network(args.demo_net)
     # load model
     saver = tf.train.Saver(write_version=tf.train.SaverDef.V1)
+    # saver = tf.train.import_meta_graph(args.model+'.meta')
     saver.restore(sess, args.model)
-   
+
     #sess.run(tf.initialize_all_variables())
 
     print '\n\nLoaded network {:s}'.format(args.model)
@@ -128,11 +135,60 @@ if __name__ == '__main__':
     im_names = ['000456.jpg', '000542.jpg', '001150.jpg',
                 '001763.jpg', '004545.jpg']
 
+    cwd = os.getcwd()
+    print cwd
 
-    for im_name in im_names:
-        print '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'
-        print 'Demo for data/demo/{}'.format(im_name)
-        demo(sess, net, im_name)
+    capture = cv2.VideoCapture('videos/s08-d14-cam-002.avi')
 
-    plt.show()
+    # Check if camera opened successfully
+    if not capture.isOpened():
+        print("Error opening video stream or file")
+    size = (
+         int(capture.get(cv2.CAP_PROP_FRAME_WIDTH)),
+         int(capture.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    )
+    codec = cv2.VideoWriter_fourcc(*'DIVX')
+    output = cv2.VideoWriter('videos/videofile_masked_2.avi', codec, 60.0, size)
+
+    i = 0
+    while capture.isOpened():
+        i = i + 1
+        ret, frame = capture.read()
+        if ret:
+            # add mask to frame
+            demo(sess, net, frame)
+            # write the frame into another file
+            fig = plt.savefig("figures/fig_"+str(i))
+            # canvas = FigureCanvas(fig)
+            # ax = fig.gca()
+            #
+            # ax.text(0.0, 0.0, "Test", fontsize=45)
+            # ax.axis('off')
+            #
+            # canvas.draw()  # draw the canvas, cache the renderer
+            #
+            # image = np.fromstring(canvas.tostring_rgb(), dtype='uint8')
+
+            output.write(frame)
+            # cv2.imshow('frame', image)
+
+            # plt.show()
+
+            if cv2.waitKey(1) & 0xFF == ord('q'):
+                break
+            print("process frame " + str(i))
+        else:
+            break
+
+    capture.release()
+    output.release()
+    cv2.destroyAllWindows()
+
+
+    # for im_name in im_names:
+    #     print '~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~'
+    #     print 'Demo for data/demo/{}'.format(im_name)
+    #     demo(sess, net, im_name)
+    #
+    # plt.show()
 
